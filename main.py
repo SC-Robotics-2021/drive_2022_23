@@ -1,121 +1,14 @@
+from callback_api import *
 from src.odrives.calibrate import *
 import src.controller.gamepad_input as gmi
 import subprocess
 
 
 
-def get_all_odrives():
-
-    odrivesSerNum = []
-
-    usbDevices = str(subprocess.run(['lsusb', '-v'], capture_output=True).stdout).split('\\n')
-
-    for device in usbDevices:
-        if "Serial" in device:
-            odrivesSerNum.append(device[28:].strip())
-            odrivesSerNum = list(filter(None, odrivesSerNum))
-
-    return odrivesSerNum
-
-
-
-def north():
-    print("North")
-
-def west():
-    print("West")
-
-def south():
-    print("South")
-    gmi.rumbleAll(0, 0.3, 100)
-
-def east():
-    print("East")
-
-def share():
-    print("Share")
-
-def options():
-    print("Options")
-
-def home():
-    print("Home")
-
-def l1():
-    print("L1")
-
-def r1():
-    print("R1")
-
-def l3():
-    print("L3")
-
-def r3():
-    print("R3")
-
-
-# Button UP callbacks
-def northUp():
-    print("North Up")
-
-def westUp():
-    print("West Up")
-
-def southUp():
-    print("South Up")
-
-def eastUp():
-    print("East Up")
-
-def shareUp():
-    print("Share Up")
-
-def optionsUp():
-    print("Options Up")
-
-def homeUp():
-    print("Home Up")
-
-def l1Up():
-    print("L1 Up")
-
-def r1Up():
-    print("R1 Up")
-
-def l3Up():
-    print("L3 Up")
-
-def r3Up():
-    print("R3 Up")
-
-
-# Hat callbacks
-def hatNorth():
-    print("Hat North")
-
-def hatSouth():
-    print("Hat South")
-
-def hatWest():
-    print("Hat West")
-
-def hatEast():
-    print("Hat East")
-
-def hatCentered():
-    print("Hat Centered")
-
-
-# Connection callbacks
-def onGamepadConnect():
-    ...
-
-def onGamepadDisconnect():
-    ...
-
-
-
 AXIS_DEADZONE = 0.3 # Deadzone is 0 to 1 | Note: axis value will be 0 until you move past the deadzone
+MIN_SPEED = -20
+MAX_SPEED = 20
+CREMENT = 5
 
 
 
@@ -134,15 +27,14 @@ def eventHandler(odrv_0, odrv_1=None):
     connectionEvents = [onGamepadConnect, onGamepadDisconnect]                          # Set connection callbacks
     gmi.run_event_loop(buttonDownEvents, buttonUpEvents, hatEvents, connectionEvents)   # Async loop to handle gamepad button events
 
-    odrv0 = odrive.find_any(serial_number=odrv_0)       # Get odrive object
-    odrv1 = odrive.find_any(serial_number=odrv_1)       # Get odrive object
-
-
-    speed = 10
-
+    speed = 5
 
     while True:
-        gp = gmi.getGamepad(0)                            # Get gamepad object
+        odrv0 = odrive.find_any(serial_number=odrv_0)       # Get odrive object
+        if odrv_1:
+            odrv1 = odrive.find_any(serial_number=odrv_1)   # Get odrive object
+
+        gp = gmi.getGamepad(0)                              # Get gamepad object
 
         (ls_x, ls_y) = gmi.getLeftStick(gp, AXIS_DEADZONE)  # Get left stick
         (rs_x, rs_y) = gmi.getRightStick(gp, AXIS_DEADZONE) # Get right stick
@@ -152,66 +44,62 @@ def eventHandler(odrv_0, odrv_1=None):
         if gmi.getButtonValue(gp, 1):
             ...
 
+        velocity = ls_y * speed
+        ramp = abs(rs_x)/1.5 + 1
+        (rampLVel, rampRVel) = (1, 1)
+
+        if rs_x < 0:
+            rampRVel = ramp
+        elif rs_x > 0:
+            rampLVel = ramp
+
+        # Lambda expressions
+        reqVel = lambda rvel: int(velocity * rvel)  # Requested velocity
+        rndS = lambda x: round(x, 2)                # Formatting stick values
+
         # Left Stick, Forward/Backward Movement
-        if l2 > 0:
+        if l2 > 0 and odrv_1:
+            print("Left Stick:", (rndS(ls_x), rndS(ls_y)), "\tRight Stick:", (rndS(rs_x), rndS(rs_y)))
+            print("Left Speed:", reqVel(rampLVel), "\t\tRight Speed:", reqVel(rampRVel))
             odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
             odrv0.axis1.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-            odrv0.axis0.controller.input_vel = int(ls_y * speed)
-            odrv0.axis1.controller.input_vel = int(ls_y * speed)
-
+            odrv0.axis0.controller.input_vel = reqVel(rampLVel)
+            odrv0.axis1.controller.input_vel = reqVel(rampLVel)
             odrv1.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
             odrv1.axis1.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-            odrv1.axis0.controller.input_vel = int(ls_y * speed)
-            odrv1.axis1.controller.input_vel = int(ls_y * speed)
-
-
-        # Right Stick, Left/Right Movement
-        # if rs_x > 0 and odrv1:
-        #     odrv1.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-        #     odrv1.axis1.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-        #     odrv1.axis0.controller.input_vel += int(rs_x * 10)
-        #     odrv1.axis1.controller.input_vel += int(rs_x * 10)
-        # elif rs_x < 0:
-        #     odrv0.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-        #     odrv0.axis1.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-        #     odrv0.axis0.controller.input_vel += int(rs_x * 10)
-        #     odrv0.axis1.controller.input_vel += int(rs_x * 10)
-
-
-# ====================================================================================================
-        # TODO: For increasing/decreasing speed
-        # if l2 > 0:
-        #     print("L2")
-        # if r2 > 0:
-        #     print("R2")
-
-        # TODO: Arm control
-        # TODO: More optimal way to do this?
-        # ! TEST MOTOR
-# ====================================================================================================
-
+            odrv1.axis0.controller.input_vel = reqVel(rampRVel)
+            odrv1.axis1.controller.input_vel = reqVel(rampRVel)
 
         # Stop all motors if no analog input
-        if r2 > 0:
+        if (ls_y == 0 and ls_x == 0) and odrv_1:
             odrv0.axis0.requested_state = AXIS_STATE_IDLE
             odrv0.axis1.requested_state = AXIS_STATE_IDLE
             odrv1.axis0.requested_state = AXIS_STATE_IDLE
             odrv1.axis1.requested_state = AXIS_STATE_IDLE
 
-        if hat_x < 0:
-            speed -= 5
+        # Ramp up/down input
+        if hat_x < 0 and speed != MIN_SPEED:
+            speed -= CREMENT
             print("Current speed: ", speed)
-        if hat_x > 0:
-            speed += 5
+        if hat_x > 0 and speed != MAX_SPEED:
+            speed += CREMENT
             print("Current speed: ", speed)
+            
+
+# ====================================================================================================
+        # TODO: Arm control
+# ====================================================================================================
+
 
 
 
 if __name__ == "__main__":
     odrives = get_all_odrives()
+    # Odrive 0:  366B385A3030 
+    # Odrive 1:  365F385E3030
     odrv0 = odrives[0]
     odrv1 = odrives[1]
 
     calibrate_all_motors(odrv0, odrv1)
-    eventHandler(odrv0, odrv1)
+    eventHandler(odrv_0=odrv0, odrv_1=odrv1)
     
